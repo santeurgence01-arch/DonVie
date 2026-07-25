@@ -8,9 +8,7 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // TODO(maps-key): remplacer par une vraie clé Google Maps
-    // (console.cloud.google.com > APIs & Services > Credentials).
-    GMSServices.provideAPIKey("YOUR_GOOGLE_MAPS_IOS_API_KEY")
+    GMSServices.provideAPIKey("AIzaSyBw_LN4zMkwg9pgqwmCcqxYIXxqbGnUPz8")
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

@@ -6,11 +6,9 @@
         android:label="health_emergency"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- TODO(maps-key): remplacer par une vraie clé Google Maps
-             (console.cloud.google.com > APIs & Services > Credentials). -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_GOOGLE_MAPS_ANDROID_API_KEY"/>
+            android:value="AIzaSyBw_LN4zMkwg9pgqwmCcqxYIXxqbGnUPz8"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

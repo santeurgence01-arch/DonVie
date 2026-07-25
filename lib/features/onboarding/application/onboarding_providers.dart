@@ -96,8 +96,9 @@ class OnboardingState {
   bool get step1Valid =>
       nom.trim().isNotEmpty && structureType != null && localisation != null;
 
-  bool get step2Valid =>
-      documents.any((d) => d.status == DocumentUploadStatus.success);
+  // Documents temporairement optionnels tant que Firebase Storage n'est
+  // pas configuré — voir §4.2 "peut être marquée optionnelle ou obligatoire".
+  bool get step2Valid => true;
 
   bool get step3Valid => groupesSanguins.isNotEmpty;
 
