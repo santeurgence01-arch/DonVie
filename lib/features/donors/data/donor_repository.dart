@@ -1,18 +1,13 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:health_emergency/features/donors/data/donor_model.dart';
 import 'package:health_emergency/features/stock/data/stock_model.dart';
 
 /// Génère un identifiant donneur de la forme `xxxx-xxxx-xxxx-xxxx`, dans le
 /// même esprit que l'exemple du cahier des charges (§4.4.3).
-///
-/// Dans une architecture complète, cet identifiant serait généré côté
-/// serveur par la Cloud Function `genererIdDonneur` (pour garantir
-/// l'unicité de façon atomique et déclencher l'appel Twilio le cas
-/// échéant) — ici, en l'absence de backend Cloud Functions dans ce
-/// dépôt, la génération se fait côté client puis est vérifiée pour
-/// collision avant écriture.
 String _generateDonorId() {
   const charset = 'abcdefghijkmnpqrstuvwxyz23456789!\$%?';
   final random = Random.secure();
@@ -21,6 +16,21 @@ String _generateDonorId() {
     (_) => charset[random.nextInt(charset.length)],
   ).join();
   return '${block()}-${block()}-${block()}-${block()}';
+}
+
+/// Dérive une adresse e-mail Firebase Auth valide à partir d'un
+/// identifiant donneur : l'identifiant contient des symboles (`!$%?`) qui,
+/// bien que valides selon la RFC 5322, sont refusés par le validateur
+/// d'e-mail (plus strict) de Firebase Auth — on encode donc en
+/// hexadécimal plutôt que d'utiliser l'identifiant tel quel. Cette
+/// fonction doit rester identique à celle utilisée côté app Donneur
+/// (lib/features/auth/data/auth_repository.dart) pour que connexion et
+/// création correspondent au même compte.
+String donorAuthEmail(String identifiantDon) {
+  final hex = identifiantDon.codeUnits
+      .map((c) => c.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '$hex@donvie.app';
 }
 
 class DonorRepository {
@@ -57,7 +67,18 @@ class DonorRepository {
   }
 
   /// Crée le donneur avec un identifiant unique (retente en cas de
-  /// collision, extrêmement improbable vu l'espace de génération).
+  /// collision, extrêmement improbable vu l'espace de génération), ainsi
+  /// qu'un compte Firebase Auth associé pour que l'app Donneur puisse s'y
+  /// connecter par identifiant.
+  ///
+  /// Le compte est créé via une instance [FirebaseApp] secondaire pour ne
+  /// pas déconnecter l'admin en cours de session (limitation connue du
+  /// SDK Firebase Auth : `createUserWithEmailAndPassword` sur l'instance
+  /// principale bascule automatiquement la session active vers le
+  /// nouveau compte). L'uid du compte créé est utilisé comme id du
+  /// document Firestore, afin que les règles de sécurité puissent
+  /// simplement comparer `request.auth.uid` à l'id du document donneur —
+  /// voir firebase/firestore.rules.
   Future<DonorModel> createDonor({
     required String structureId,
     required String nom,
@@ -68,32 +89,34 @@ class DonorRepository {
     required GeoPoint? localisation,
     String? adresse,
   }) async {
-    late String id;
+    late String identifiantDon;
     for (var attempt = 0; attempt < 5; attempt++) {
-      id = _generateDonorId();
+      identifiantDon = _generateDonorId();
       final existing = await _collection
-          .where('identifiantDon', isEqualTo: id)
+          .where('identifiantDon', isEqualTo: identifiantDon)
           .limit(1)
           .get();
       if (existing.docs.isEmpty) break;
     }
 
+    final uid = await _createDonorAuthAccount(identifiantDon);
+
     final donor = DonorModel(
-      id: '',
+      id: uid,
       structureId: structureId,
       nom: nom,
       prenom: prenom,
       age: age,
       telephone: telephone,
       groupeSanguin: groupeSanguin,
-      identifiantDon: id,
+      identifiantDon: identifiantDon,
       adresse: adresse,
       localisation: localisation,
     );
 
-    final ref = await _collection.add(donor.toMap());
+    await _collection.doc(uid).set(donor.toMap());
     return DonorModel(
-      id: ref.id,
+      id: uid,
       structureId: donor.structureId,
       nom: donor.nom,
       prenom: donor.prenom,
@@ -105,6 +128,23 @@ class DonorRepository {
       localisation: donor.localisation,
       createdAt: DateTime.now(),
     );
+  }
+
+  Future<String> _createDonorAuthAccount(String identifiantDon) async {
+    final secondaryApp = await Firebase.initializeApp(
+      name: 'donorCreation-${DateTime.now().microsecondsSinceEpoch}',
+      options: Firebase.app().options,
+    );
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: donorAuthEmail(identifiantDon),
+        password: identifiantDon,
+      );
+      return credential.user!.uid;
+    } finally {
+      await secondaryApp.delete();
+    }
   }
 
   Future<void> setActive(String id, bool active) {

@@ -13,6 +13,7 @@ class DonorModel {
     this.adresse,
     this.localisation,
     this.actif = true,
+    this.disponible = true,
     this.createdAt,
   });
 
@@ -27,6 +28,10 @@ class DonorModel {
   final String? adresse;
   final GeoPoint? localisation;
   final bool actif;
+  // Disponibilité déclarée par le donneur lui-même dans l'app Donneur
+  // (§4.2 de son cahier des charges) — informatif côté structure, ne
+  // bloque pas l'envoi de notifications.
+  final bool disponible;
   final DateTime? createdAt;
 
   String get nomComplet => '$prenom $nom';
@@ -51,6 +56,7 @@ class DonorModel {
       adresse: data['adresse'] as String?,
       localisation: data['localisation'] as GeoPoint?,
       actif: data['actif'] as bool? ?? true,
+      disponible: data['disponible'] as bool? ?? true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -67,6 +73,7 @@ class DonorModel {
       'adresse': adresse,
       'localisation': localisation,
       'actif': actif,
+      'disponible': disponible,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }
